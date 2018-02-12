@@ -1,13 +1,116 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <script src="https://npmcdn.com/babel-core@5.8.38/browser.min.js"></script>
-    <script type="text/babel" >
+    <script src="/socket.io/socket.io.js"></script>
+	<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-core/5.8.34/browser.min.js"></script>
+	<script type="text/babel">  
         "use strict";
     
+        let canvas;
+        let ctx;
+        //our websocket connection
+        let socket;
+
+        const user = `user${(Math.floor((Math.random()*10000)) + 1)}`;
+        let drawObjects = {};
+        let square;
+
+        let color;
+
+        const moveSquare = (e) => {
+          console.dir('moving!');
+          // Change the square's position based on key pressed
+          switch(e.keyCode) {
+            // W
+            case 87: square.y -= 3;
+              break;
+            // A
+            case 65: square.x -= 3;
+              break;
+            // S
+            case 83: square.y += 3;
+              break;
+            // D
+            case 68: square.x += 3;
+              break;
+          }
+          
+          // Emit squareMoved to the server
+          socket.emit('squareMoved', square);
+        }
+        
+        const draw = () => {
+          // Clear the canvas
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+          // Loop through our drawObjects
+          if(drawObjects) {
+            
+            let keys = Object.keys(drawObjects);
+            
+            // Sort our keys by lastUpdated
+            // This makes sure the most recently updated square is in front
+            keys.sort(function(a, b) {
+              return drawObjects[a].lastUpdate - drawObjects[b].lastUpdate;
+            });
+            
+            for(let i = 0; i < keys.length; i++) {
+              // Get the square
+              let square = drawObjects[keys[i]];
+
+              // Change the fillStyle of the canvas to the square's color
+              ctx.fillStyle = square.color;
+
+              // Fill the square
+              ctx.fillRect(square.x - square.width / 2.0, square.y - square.height / 2.0, square.width, square.height);
+            }
+          }
+        };
+  
+        // Funciton used when a square has updated its position
+        const update = (data) => {
+          // Update our drawObjects and draw
+          if(!drawObjects[data.user]) {
+            drawObjects[data.user] = data;
+          } else if(data.lastUpdate > drawObjects[data.user].lastUpdate) {
+            drawObjects[data.user] = data;
+          }
+          draw();
+        };
+
+        // Function used when joining for the first time
+        // Updates our drawObjects to the server's drawObjects and draws
+        const setObjects = (data) => {
+          drawObjects = data;
+          draw();
+        }
+
+        const init = () => {
+          canvas = document.querySelector("#canvas");
+          ctx = canvas.getContext("2d");
+          color = `rgb(${Math.floor(Math.random() * 255)}, ${Math.floor(Math.random() * 255)}, ${Math.floor(Math.random() * 255)})`;
+          square = {'user': user, 'x': Math.floor(Math.random() * canvas.width), 'y': Math.floor(Math.random() * canvas.height), 'height': 50, 'width': 50, 'color': color };
+          ctx.fillStyle = color;
+
+          socket = io.connect();
+          
+          socket.on('connect', function(){
+            socket.emit('squareCreated', square);
+          });
+
+          socket.on('updatedObjects', update);
+          
+          socket.on('setObjects', setObjects);
+          
+          // Keydown events for movement
+          window.addEventListener("keydown", moveSquare);
+        };
+
+      window.onload = init;
     </script>
 </head>
 <body>
-
+    <canvas id="canvas" height="500" width="500" style="border: 1px solid black;">Please use an HTML 5 browser</canvas>
+  <p>Move your square around the canvas using WASD!</p>
 </body>
 </html>
